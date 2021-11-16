@@ -17,12 +17,17 @@ import java.util.*;
 public class TelegramFacade {
     private String botNotUnderstandAnswer() { return "Sorry, I can't understand you.\nPlease, write /help"; }
 
-    private final Map<Long, ConversationStatus> userConversationStatus = new HashMap<>();
-    private final Map<Long, UUID> userSelectedEvent = new HashMap<>();
-    private final Map<Long, HashSet<UUID>> userEvents = new HashMap<>();
-    private final Map<UUID, HashSet<String>> eventFeedbacks = new HashMap<>();
+    private final Map<UUID, ConversationStatus> userConversationStatus = new HashMap<>();
+    private final Map<UUID, UUID> userSelectedEvent = new HashMap<>();
+    private final Map<UUID, HashSet<UUID>> userEvents = new HashMap<>();
+    private final Map<UUID, HashSet<UUID>> eventFeedbacks = new HashMap<>();
 
-    private final Map<UUID, Pair<String, String>> events = new HashMap<>();
+    private final Map<UUID, Pair<String, String>> eventsInfo = new HashMap<>();
+//    private final Map<UUID, Long> eventCreatorId = new HashMap<>();
+    private final Map<UUID, String> idToMessage = new HashMap<>();
+
+    private final Map<UUID, Long> idToUserId = new HashMap<>();
+    private final Map<Long, UUID> userIdToId = new HashMap<>();
 
 
     public SendMessage handleUpdate(Update update) {
@@ -38,7 +43,9 @@ public class TelegramFacade {
                 markup = result.getValue();
             }
             else if (message.hasText()) {
-                botAnswer = handleInputMessage(message);
+                Pair<String, InlineKeyboardMarkup> result = handleInputMessage(message);
+                botAnswer = result.getKey();
+                markup = result.getValue();
             }
 
             SendMessage reply = new SendMessage(message.getChatId().toString(), botAnswer);
@@ -62,8 +69,14 @@ public class TelegramFacade {
         String telegramBotUrl = "https://t.me/bro_en_test_bot?start=";
         InlineKeyboardMarkup markup = null;
 
-        ConversationStatus conversationStatus = userConversationStatus.get(chatId);
-        userConversationStatus.remove(chatId);
+        if (!userIdToId.containsKey(chatId)) {
+            userIdToId.put(chatId, UUID.randomUUID());
+        }
+
+        UUID userId = userIdToId.get(chatId);
+
+        ConversationStatus conversationStatus = userConversationStatus.get(userId);
+        userConversationStatus.remove(userId);
 
         switch (conversationStatus) {
             case CreateEvent:
@@ -79,12 +92,13 @@ public class TelegramFacade {
                 String eventName = parts[0];
                 String eventDescription = parts[1];
 
-                events.put(uuid, new Pair<>(eventName, eventDescription));
+                eventsInfo.put(uuid, new Pair<>(eventName, eventDescription));
+//                eventCreatorId.put(uuid, chatId);
 
-                if (userEvents.containsKey(chatId)) {
-                    userEvents.get(chatId).add(uuid);
+                if (userEvents.containsKey(userId)) {
+                    userEvents.get(userId).add(uuid);
                 } else {
-                    userEvents.put(chatId, new HashSet<>(Arrays.asList(uuid)));
+                    userEvents.put(userId, new HashSet<>(Arrays.asList(uuid)));
                 }
 
                 botAnswer = String.format("Event name: %s\nDescription: %s", eventName, eventDescription);
@@ -96,20 +110,21 @@ public class TelegramFacade {
                 InlineKeyboardButton button = new InlineKeyboardButton();
                 button.setText("Send feedback");
                 button.setCallbackData("feedback_" + uuid);
-                button.setUrl(telegramBotUrl + uuid);
+                button.setUrl(telegramBotUrl + "createEvent__" + uuid);
                 rowInline.add(button);
                 rowsInline.add(rowInline);
                 markup.setKeyboard(rowsInline);
                 break;
             case CreateFeedback:
                 botAnswer = "Successfully send!";
-                if (userSelectedEvent.containsKey(message.getChatId())) {
-                    UUID event = userSelectedEvent.get(message.getChatId());
-
+                if (userSelectedEvent.containsKey(userId)) {
+                    UUID event = userSelectedEvent.get(userId);
+                    UUID messageId = UUID.randomUUID();
+                    idToMessage.put(messageId, message.getText());
                     if (eventFeedbacks.containsKey(event)) {
-                        eventFeedbacks.get(event).add(message.getText());
+                        eventFeedbacks.get(event).add(messageId);
                     } else {
-                        eventFeedbacks.put(event, new HashSet<>(Arrays.asList(message.getText())));
+                        eventFeedbacks.put(event, new HashSet<>(Arrays.asList(messageId)));
                     }
                 } else {
                     botAnswer = "Something went wrong!";
@@ -124,18 +139,26 @@ public class TelegramFacade {
         String queryData = query.getData();
         long chatId = query.getMessage().getChatId();
 
+        if (!userIdToId.containsKey(chatId)) {
+            userIdToId.put(chatId, UUID.randomUUID());
+        }
+
+        UUID userId = userIdToId.get(chatId);
+
         if (queryData.startsWith("feedback_")) {
             UUID event = UUID.fromString(queryData.replaceFirst("feedback_", ""));
 
-            userSelectedEvent.put(chatId, event);
-            userConversationStatus.put(chatId, ConversationStatus.CreateFeedback);
+            userSelectedEvent.put(userId, event);
+            userConversationStatus.put(userId, ConversationStatus.CreateFeedback);
         }
 
         return "Please, write your feedback for event";
     }
 
-    private String handleInputMessage(Message message) {
+    private Pair<String, InlineKeyboardMarkup> handleInputMessage(Message message) {
         String botAnswer = "Sorry, I can't understand you.\nPlease, write /help";
+        String telegramBotUrl = "https://t.me/bro_en_test_bot?start=";
+        InlineKeyboardMarkup markup = null;
 
         String helpMessage = "Hi! This bot allows you to register your events and get anonymous feedback from other users. Moreover, you can chat with them!\n"
                 + "My commands:\n"
@@ -146,6 +169,12 @@ public class TelegramFacade {
                 + "/create_event";
 
         Long chatId = message.getChatId();
+
+        if (!userIdToId.containsKey(chatId)) {
+            userIdToId.put(chatId, UUID.randomUUID());
+        }
+
+        UUID userId = userIdToId.get(chatId);
 
         String text = message.getText();
 
@@ -158,15 +187,15 @@ public class TelegramFacade {
                 break;
             case "/create_event":
                 botAnswer = "Please, write in following format:\nevent name - event description";
-                userConversationStatus.put(chatId, ConversationStatus.CreateEvent);
+                userConversationStatus.put(userId, ConversationStatus.CreateEvent);
                 break;
             case "/my_events":
-                if (userEvents.containsKey(chatId) && userEvents.get(chatId).size() > 0) {
-                    ArrayList<UUID> evts = new ArrayList<>(userEvents.get(chatId));
+                if (userEvents.containsKey(userId) && userEvents.get(userId).size() > 0) {
+                    ArrayList<UUID> evts = new ArrayList<>(userEvents.get(userId));
                     Collections.sort(evts);
                     StringBuffer strBuffer = new StringBuffer();
                     for (UUID event: evts) {
-                        strBuffer.append(String.format("- %s\n", events.get(event).getKey()));
+                        strBuffer.append(String.format("- %s\n", String.format("<a href=\"%s\">%s</a>", telegramBotUrl + "event__" + event, eventsInfo.get(event).getKey())));
                     }
                     botAnswer = "Your events:\n" + strBuffer;
                 } else {
@@ -174,22 +203,22 @@ public class TelegramFacade {
                 }
                 break;
             case "/feedback":
-                if (!userEvents.containsKey(chatId)) {
+                if (!userEvents.containsKey(userId)) {
                     botAnswer = "You didn't create any event yet!\nPlease, write /create_event";
                     break;
                 }
 
-                HashSet<UUID> evts = userEvents.get(chatId);
+                HashSet<UUID> evts = userEvents.get(userId);
 
                 StringBuffer strBuffer = new StringBuffer();
 
                 for (UUID event: evts) {
                     if (eventFeedbacks.containsKey(event)) {
-                        HashSet<String> feedbacks = eventFeedbacks.get(event);
+                        HashSet<UUID> feedbacks = eventFeedbacks.get(event);
                         if (feedbacks.size() > 0) {
-                            strBuffer.append(String.format("Event: %s\n", events.get(event).getKey()));
-                            for (String feedback : feedbacks) {
-                                strBuffer.append(String.format("-> %s\n", feedback));
+                            strBuffer.append(String.format("Event: %s\n", eventsInfo.get(event).getKey()));
+                            for (UUID feedbackId : feedbacks) {
+                                strBuffer.append(String.format("-> %s\n", idToMessage.get(feedbackId)));
                             }
                             eventFeedbacks.put(event, new HashSet<>());
                         }
@@ -206,12 +235,22 @@ public class TelegramFacade {
 
         if (text.startsWith("/start") && text.length() > 7) {
             String[] parts = text.split(" ", 2);
-            userConversationStatus.put(message.getChatId(), ConversationStatus.CreateFeedback);
-            userSelectedEvent.put(message.getChatId(), UUID.fromString(parts[1]));
-            botAnswer = "Please, write feedback for event " + events.get(UUID.fromString(parts[1])).getKey();
+            String[] parts1 = parts[1].split("__", 2);
+            if (parts1.length != 2) {
+                return new Pair<>("Something went wrong!", null);
+            }
+            if (Objects.equals(parts1[0], "createEvent")) {
+                userConversationStatus.put(userId, ConversationStatus.CreateFeedback);
+                userSelectedEvent.put(userId, UUID.fromString(parts[1]));
+                botAnswer = "Please, write feedback for event " + eventsInfo.get(UUID.fromString(parts[1])).getKey();
+            } else if (Objects.equals(parts1[0], "event")) {
+
+            } else {
+                return new Pair<>("Smth went wrong!", null);
+            }
         }
 
-        return botAnswer;
+        return new Pair<>(botAnswer, markup);
     }
 
     private enum ConversationStatus {
