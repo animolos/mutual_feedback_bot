@@ -31,12 +31,13 @@ public class TelegramFacade {
 
     private final Map<UUID, Long> idToUserId = new HashMap<>();
     private final Map<Long, UUID> userIdToId = new HashMap<>();
+    private final Map<UUID, HashSet<UUID>> userToReplies = new HashMap<>();
+    private final Map<UUID, UUID> replyToReply = new HashMap<>();
 
 
-    public Pair<SendMessage, SendMessage> handleUpdate(Update update) {
+    public SendMessage handleUpdate(Update update) {
         String botAnswer = botNotUnderstandAnswer();
         InlineKeyboardMarkup markup = null;
-        SendMessage otherChatMessage = null;
 
         if (update.hasMessage()) {
             Message message = update.getMessage();
@@ -54,11 +55,9 @@ public class TelegramFacade {
             }
 
             if (userConversationStatus.containsKey(userIdToId.get(chatId))) {
-                Pair<Pair<String, InlineKeyboardMarkup>, SendMessage> result = handleConversationStatus(message);
-                Pair<String, InlineKeyboardMarkup> bot = result.getKey();
-                botAnswer = bot.getKey();
-                markup = bot.getValue();
-                otherChatMessage = result.getValue();
+                Pair<String, InlineKeyboardMarkup> result = handleConversationStatus(message);
+                botAnswer = result.getKey();
+                markup = result.getValue();
             }
             else if (message.hasText()) {
                 Pair<String, InlineKeyboardMarkup> result = handleInputMessage(message);
@@ -74,7 +73,7 @@ public class TelegramFacade {
             if (markup != null)
                 reply.setReplyMarkup(markup);
 
-            return new Pair<>(reply, otherChatMessage);
+            return reply;
         } else if (update.hasCallbackQuery()) {
             Long chatId = update.getCallbackQuery().getMessage().getChatId();
 
@@ -90,19 +89,17 @@ public class TelegramFacade {
 
             botAnswer = handleCallbackQuery(update.getCallbackQuery());
 
-            return new Pair<>(new SendMessage(update.getCallbackQuery().getMessage().getChatId().toString(), botAnswer), null);
+            return new SendMessage(update.getCallbackQuery().getMessage().getChatId().toString(), botAnswer);
         } else {
             return null;
         }
     }
 
-    private Pair<Pair<String, InlineKeyboardMarkup>, SendMessage> handleConversationStatus(Message message) {
+    private Pair<String, InlineKeyboardMarkup> handleConversationStatus(Message message) {
         Long chatId = message.getChatId();
         String botAnswer = botNotUnderstandAnswer();
         String telegramBotUrl = "https://t.me/bro_en_test_bot?start=";
         InlineKeyboardMarkup markup = null;
-
-        SendMessage otherUserSendMessage = null;
 
         UUID userId = userIdToId.get(chatId);
 
@@ -124,7 +121,6 @@ public class TelegramFacade {
                 String eventDescription = parts[1];
 
                 eventsInfo.put(uuid, new Pair<>(eventName, eventDescription));
-//                eventCreatorId.put(uuid, chatId);
 
                 if (userEvents.containsKey(userId)) {
                     userEvents.get(userId).add(uuid);
@@ -166,33 +162,21 @@ public class TelegramFacade {
                 botAnswer = "Successfully send!";
                 UUID messageToReply = userSelectedMessageToReply.get(userId);
                 UUID userToReply = messageIdToUserId.get(messageToReply);
-                Long user = idToUserId.get(userToReply);
-                String msg = messageIdToMessage.get(messageToReply);
-
-                String otherUserBotAnswer = "Error while replying to your message";
-                InlineKeyboardMarkup otherUserBotMarkup = new InlineKeyboardMarkup();
-
-                String jj = "There are reply to your feedback!\nMessage: " + msg + "\nReply: " + message.getText();
 
                 UUID msgId = UUID.randomUUID();
                 messageIdToMessage.put(msgId, message.getText());
                 messageIdToUserId.put(msgId, userId);
 
-                List<List<InlineKeyboardButton>> o_rowsInline = new ArrayList<>();
-                List<InlineKeyboardButton> o_rowInline = new ArrayList<>();
-                InlineKeyboardButton o_button = new InlineKeyboardButton();
-                o_button.setText("Reply");
-                o_button.setCallbackData("reply_" + message);
-                o_button.setUrl(telegramBotUrl + "reply__" + msg);
-                o_rowInline.add(o_button);
-                o_rowsInline.add(o_rowInline);
-                otherUserBotMarkup.setKeyboard(o_rowsInline);
+                replyToReply.put(msgId, messageToReply);
 
-                otherUserSendMessage = new SendMessage(user.toString(), jj);
-                otherUserSendMessage.setReplyMarkup(otherUserBotMarkup);
+                if (userToReplies.containsKey(userToReply)) {
+                    userToReplies.get(userToReply).add(msgId);
+                } else {
+                    userToReplies.put(userToReply, new HashSet<>(Arrays.asList(msgId)));
+                }
         }
 
-        return new Pair<>(new Pair<>(botAnswer, markup), otherUserSendMessage);
+        return new Pair<>(botAnswer, markup);
     }
 
     private String handleCallbackQuery(CallbackQuery query) {
@@ -231,7 +215,8 @@ public class TelegramFacade {
                 + "/help\n"
                 + "/feedback\n"
                 + "/my_events\n"
-                + "/create_event";
+                + "/create_event\n"
+                + "/replies";
 
         Long chatId = message.getChatId();
 
@@ -261,6 +246,23 @@ public class TelegramFacade {
                     botAnswer = "Your events:\n" + strBuffer;
                 } else {
                     botAnswer = "You didn't create any event yet!\nPlease, write /create_event";
+                }
+                break;
+            case "/replies":
+                if (userToReplies.containsKey(userId) && userToReplies.get(userId).size() > 0) {
+                    StringBuffer strBuffer = new StringBuffer();
+                    for (UUID msgId: userToReplies.get(userId)) {
+                        UUID repliedMsg = replyToReply.get(msgId);
+                        strBuffer.append("Reply:\n");
+                        strBuffer.append(String.format("%s\n", messageIdToMessage.get(msgId)));
+                        strBuffer.append("On your message:\n");
+                        strBuffer.append(String.format("%s\n", messageIdToMessage.get(repliedMsg)));
+                        strBuffer.append(String.format("(%s)\n-----\n", String.format("<a href=\"%s\">reply</a>", telegramBotUrl + "reply__" + msgId)));
+                    }
+                    userToReplies.put(userId, new HashSet<>());
+                    botAnswer = strBuffer.toString();
+                } else {
+                    botAnswer = "No replies on your feedback";
                 }
                 break;
             case "/feedback":
@@ -313,19 +315,6 @@ public class TelegramFacade {
                 userConversationStatus.put(userId, ConversationStatus.Reply);
                 userSelectedMessageToReply.put(userId, messageId);
                 botAnswer = "Write reply to message:\n" + messageIdToMessage.get(messageId);
-//                botAnswer = "Message:\n" + messageIdToMessage.get(messageId);
-
-//                markup = new InlineKeyboardMarkup();
-//
-//                List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-//                List<InlineKeyboardButton> rowInline = new ArrayList<>();
-//                InlineKeyboardButton button = new InlineKeyboardButton();
-//                button.setText("Reply");
-//                button.setCallbackData("reply_" + messageId);
-//                button.setUrl(telegramBotUrl + "reply__" + messageId);
-//                rowInline.add(button);
-//                rowsInline.add(rowInline);
-//                markup.setKeyboard(rowsInline);
             } else {
                 return new Pair<>("Smth went wrong!", null);
             }

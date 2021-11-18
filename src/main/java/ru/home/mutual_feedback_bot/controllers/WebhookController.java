@@ -22,7 +22,7 @@ public class WebhookController {
     }
 
     @RequestMapping(value = "/", method = RequestMethod.POST)
-    public BotApiMethod<Message> onUpdateReceived(@RequestBody Update update) {
+    public BotApiMethod<Message> onUpdateReceived(@RequestBody Update update) throws TelegramApiException {
 //        telegramBot.execute(new SendMessage("527302283", "12345"));
         return telegramBot.onWebhookUpdateReceived(update);
     }

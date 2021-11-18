@@ -40,9 +40,7 @@ public class MutualFeedbackBot extends TelegramWebhookBot {
 
     @Override
     public BotApiMethod<Message> onWebhookUpdateReceived(Update update) {
-        Pair<SendMessage, SendMessage> res = telegramFacade.handleUpdate(update);
-
-        return res.getKey();
+        return telegramFacade.handleUpdate(update);
     }
 
     public void setWebHookPath(String webHookPath) {
