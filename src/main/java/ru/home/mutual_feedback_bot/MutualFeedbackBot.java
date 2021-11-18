@@ -6,6 +6,7 @@ import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.home.mutual_feedback_bot.api.TelegramFacade;
@@ -38,22 +39,9 @@ public class MutualFeedbackBot extends TelegramWebhookBot {
     }
 
     @Override
-    public BotApiMethod onWebhookUpdateReceived(Update update) {
+    public BotApiMethod<Message> onWebhookUpdateReceived(Update update) {
         Pair<SendMessage, SendMessage> res = telegramFacade.handleUpdate(update);
-//        if (res.getValue() != null) {
-//            try {
-//                sendApiMethod(res.getValue()); // TODO: 17/11/2021 как-то послать сообщение другому пользователю
-//            } catch (TelegramApiException e) {
-//                e.printStackTrace();
-//            }
-//        }
-//
-        try {
-            execute(res.getKey());
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
-//        execute(res.getKey());
+
         return res.getKey();
     }
 

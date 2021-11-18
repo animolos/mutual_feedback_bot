@@ -66,7 +66,9 @@ public class TelegramFacade {
                 markup = result.getValue();
             }
 
-            SendMessage reply = new SendMessage(message.getChatId().toString(), botAnswer);
+            SendMessage reply = new SendMessage();//message.getChatId().toString(), botAnswer);
+            reply.setChatId(message.getChatId().toString());
+            reply.setText(botAnswer);
             reply.setParseMode(ParseMode.HTML);
 
             if (markup != null)
