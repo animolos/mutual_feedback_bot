@@ -1,26 +1,33 @@
-//package ru.home.mutual_feedback_bot.entities;
-//
-//import javax.persistence.*;
-//import java.util.Set;
-//
-//@Entity
-//@Table(name = "event")
-//public class Event {
-//    @Id
-//    private int id;
-//
-//    @Column(name = "name")
-//    private String name;
-//
-//    @OneToOne()
-//    private User createdBy;
-//
-//    @Column(name = "description")
-//    private String description;
-//
-//    @ManyToMany(mappedBy = "events")
-//    private Set<User> users;
-//
-//    @OneToMany()
-//    private Set<Feedback> feedbacks;
-//}
+package ru.home.mutual_feedback_bot.entities;
+
+import lombok.*;
+
+import javax.persistence.*;
+import java.util.Set;
+
+@RequiredArgsConstructor
+@NoArgsConstructor
+@Entity
+@Getter
+@Table(name = "events")
+public class Event {
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    @Column
+    @NonNull
+    private String name;
+
+    @Column
+    @NonNull
+    private String description;
+
+    @NonNull
+    @ManyToOne
+    @JoinColumn(name = "createdBy")
+    private User createdBy;
+
+    @OneToMany(mappedBy="destination")
+    private Set<Feedback> feedbacks;
+}

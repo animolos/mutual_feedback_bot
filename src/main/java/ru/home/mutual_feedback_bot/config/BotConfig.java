@@ -6,14 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
-import ru.home.mutual_feedback_bot.MutualFeedbackBot;
-import ru.home.mutual_feedback_bot.api.TelegramFacade;
 
 @Setter
 @Getter
 @Configuration
 @ConfigurationProperties(prefix = "telegrambot")
 public class BotConfig {
+    private String telegramBotUrl;
     private String webHookPath;
     private String botUserName;
     private String botToken;
@@ -23,19 +22,13 @@ public class BotConfig {
     private int proxyPort;
 
     @Bean
-    public MutualFeedbackBot mutualFeedbackBot(TelegramFacade telegramFacade) {
+    public DefaultBotOptions defaultBotOptions() {
         DefaultBotOptions options = new DefaultBotOptions();
 
         options.setProxyHost(proxyHost);
         options.setProxyPort(proxyPort);
         options.setProxyType(proxyType);
 
-        MutualFeedbackBot telegramBot = new MutualFeedbackBot(options, telegramFacade);
-
-        telegramBot.setBotUserName(botUserName);
-        telegramBot.setBotToken(botToken);
-        telegramBot.setWebHookPath(webHookPath);
-
-        return telegramBot;
+        return options;
     }
 }

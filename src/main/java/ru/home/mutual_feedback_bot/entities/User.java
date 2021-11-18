@@ -1,20 +1,34 @@
-//package ru.home.mutual_feedback_bot.entities;
-//
-//import javax.persistence.*;
-//import java.util.Set;
-//
-//@Entity
-//@Table(name = "user")
-//public class User {
-//    @Id
-//    private long id;
-//
-//    @Column(name = "name")
-//    private String name;
-//
-//    @ManyToMany()
-//    Set<Event> events;
-//
-//    @OneToMany()
-//    Set<Feedback> feedbacks;
-//}
+package ru.home.mutual_feedback_bot.entities;
+
+import lombok.*;
+import ru.home.mutual_feedback_bot.models.ConversationStatus;
+
+import javax.persistence.*;
+import java.util.HashSet;
+import java.util.Set;
+
+@RequiredArgsConstructor
+@NoArgsConstructor
+@Entity
+@Getter
+@Table(name = "users")
+public class User {
+    @Id
+    @NonNull
+    private Long id;
+
+    @Column
+    @Setter
+    @NonNull
+    private ConversationStatus conversationStatus = ConversationStatus.Default;
+
+    @Column
+    @Setter
+    private Long selectedEventId;
+
+    @OneToMany(mappedBy="createdBy")
+    private final Set<Event> events = new HashSet<>();
+
+    @OneToMany(mappedBy="createdBy")
+    private Set<Feedback> feedbacks;
+}
