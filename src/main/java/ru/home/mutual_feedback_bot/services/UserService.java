@@ -2,6 +2,7 @@ package ru.home.mutual_feedback_bot.services;
 
 import org.springframework.stereotype.Service;
 import ru.home.mutual_feedback_bot.entities.User;
+import ru.home.mutual_feedback_bot.models.ConversationStatus;
 import ru.home.mutual_feedback_bot.repositories.UserRepository;
 
 @Service
@@ -19,5 +20,11 @@ public class UserService {
 
     public User findById(Long chatId){
         return userRepository.findById(chatId).orElse(null);
+    }
+
+    public void resetUser(User user) {
+        user.setConversationStatus(ConversationStatus.Default);
+        user.setSelectedEventId(null);
+        this.insertOrUpdate(user);
     }
 }

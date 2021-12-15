@@ -35,7 +35,4 @@ public class User {
 
     @OneToMany(mappedBy="createdBy")
     private Set<Feedback> feedbacks;
-
-    @OneToMany(mappedBy="createdBy")
-    private Set<Reply> replies;
 }
