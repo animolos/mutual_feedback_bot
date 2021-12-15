@@ -2,6 +2,7 @@ package ru.home.mutual_feedback_bot.api;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -17,6 +18,9 @@ import ru.home.mutual_feedback_bot.services.FeedbackService;
 import ru.home.mutual_feedback_bot.services.UserService;
 
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -42,9 +46,8 @@ public class TelegramFacade {
     public SendMessage handleUpdate(Update update) {
         if (update.hasMessage()) {
             return handleInputMessage(update.getMessage());
-        } else {
-            return null;
         }
+        return null;
     }
 
     private SendMessage handleInputMessage(Message message) {
@@ -69,6 +72,7 @@ public class TelegramFacade {
             case "/create_event" -> handleCreateEventCommand(user);
             case "/my_events" -> handleMyEventsCommand(user);
             case "/feedback" -> handleFeedbackCommand(user);
+            case "/replies" -> handleRepliesCommand(user);
             default -> handleConversationStatus(message, user);
         };
     }
@@ -82,18 +86,18 @@ public class TelegramFacade {
         }
 
         String botAnswer;
-        String[] tokens = params.split("__", 2);
+        String[] tokens = params.split("__");
 
-        if (tokens.length != 2) {
-            botAnswer = "Something went wrong!";
-        }
-        else if (tokens[0].equals("createEvent")) {
+        if (tokens[0].equals("leaveFeedback")) {
             Long eventId = Long.parseLong(tokens[1]);
+            Long feedbackId = tokens.length == 3 ? Long.parseLong(tokens[2]) : null;
             user.setConversationStatus(ConversationStatus.CreateFeedback);
             user.setSelectedEventId(eventId);
+            user.setSelectedFeedbackId(feedbackId);
             userService.insertOrUpdate(user);
-            botAnswer = "Please, write feedback for event " + eventService.findById(eventId).getName();
-        } else {
+            botAnswer = "Write your message";
+        }
+        else {
             botAnswer = "Something went wrong!";
         }
 
@@ -143,16 +147,74 @@ public class TelegramFacade {
             }
 
             builder.append(String.format("Event: %s\n", event.getName()));
-            for (Feedback feedback : event.getFeedbacks()) {
-                builder.append(String.format("-> %s\n", feedback.getMessage()));
+            for (Feedback feedback : event.getFeedbacks()
+                    .stream()
+                    .sorted(Comparator.comparing(Feedback::getCreatedAt))
+                    .toList()) {
+                if (feedback.isReply()) {
+                    continue;
+                }
+                String params = String.format("%s__%s__%s", "leaveFeedback", event.getId(), feedback.getId());
+                builder.append(String.format("(%s) -> %s\n",
+                        String.format("<a href=\"%s\">%s</a>", telegramBotUrl + params, "reply"),
+                        feedback.getMessage()));
             }
         }
 
         String botAnswer = builder.isEmpty()
-                ? "Can't find new feedback for your events."
+                ? "Can't find feedback of your events."
                 : builder.toString();
 
-        return new SendMessage(chatId, botAnswer);
+        var sendMessage = new SendMessage(chatId, botAnswer);
+        sendMessage.setParseMode(ParseMode.HTML);
+        return sendMessage;
+    }
+
+    private SendMessage handleRepliesCommand(User user) {
+        String chatId = user.getId().toString();
+
+        resetUserConversation(user);
+
+        if (user.getFeedbacks().isEmpty()) {
+            String botAnswer = "You didn't leave any feedback yet!";
+            return new SendMessage(chatId, botAnswer);
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (Event event : user.getEvents()) {
+            StringBuilder tempBuilder = new StringBuilder();
+            for (Feedback feedback : event.getFeedbacks()
+                    .stream()
+                    .sorted(Comparator.comparing(Feedback::getCreatedAt))
+                    .toList()) {
+                List<Feedback> replies = feedback.getChildFeedback().stream()
+                        .sorted(Comparator.comparing(Feedback::getCreatedAt)).toList();
+
+                for (Feedback reply : replies) {
+                    tempBuilder.append("Reply:\n");
+                    tempBuilder.append(String.format("%s\n", reply.getMessage()));
+                    tempBuilder.append("On your message:\n");
+                    tempBuilder.append(String.format("%s\n", feedback.getMessage()));
+                    String params = String.format("%s__%s__%s", "leaveFeedback", event.getId(), reply.getId());
+                    tempBuilder.append(String.format("(<a href=\"%s\">reply</a>)", telegramBotUrl + params));
+                    tempBuilder.append("\n-----\n");
+                }
+            }
+
+            if (!tempBuilder.isEmpty()) {
+                builder.append(String.format("Event: %s\n", event.getName()));
+                builder.append(tempBuilder);
+            }
+        }
+
+        String botAnswer = builder.isEmpty()
+                ? "No replies to your feedback"
+                : builder.toString();
+
+        var sendMessage = new SendMessage(chatId, botAnswer);
+        sendMessage.setParseMode(ParseMode.HTML);
+
+        return sendMessage;
     }
 
     private SendMessage handleConversationStatus(Message message, User user) {
@@ -183,7 +245,7 @@ public class TelegramFacade {
         String botAnswer = String.format("Event name: %s\nDescription: %s", eventName, eventDescription);
 
         InlineKeyboardButton button = new InlineKeyboardButton("Send feedback");
-        button.setUrl(telegramBotUrl + "createEvent__" + event.getId());
+        button.setUrl(telegramBotUrl + "leaveFeedback__" + event.getId());
 
         InlineKeyboardMarkup markup =
                 new InlineKeyboardMarkup(Collections.singletonList(Collections.singletonList(button)));
@@ -198,13 +260,20 @@ public class TelegramFacade {
         String chatId = user.getId().toString();
 
         Long selectedEventId = user.getSelectedEventId();
+        Long selectedFeedbackId = user.getSelectedFeedbackId();
         if (selectedEventId == null) {
             String botAnswer = "Something went wrong!";
             return new SendMessage(chatId, botAnswer);
         }
 
         Event selectedEvent = eventService.findById(selectedEventId);
-        Feedback feedback = new Feedback(message.getText(), selectedEvent, user);
+        Feedback feedback = new Feedback(message.getText(), selectedEvent, user, new Date());
+
+        if (selectedFeedbackId != null) {
+            Feedback parentFeedback = feedbackService.findById(selectedFeedbackId);
+            feedback.setParentFeedback(parentFeedback);
+        }
+
         feedbackService.createFeedback(feedback);
 
         resetUserConversation(user);
@@ -219,7 +288,8 @@ public class TelegramFacade {
                 + "/start\n"
                 + "/feedback\n"
                 + "/my_events\n"
-                + "/create_event";
+                + "/create_event\n"
+                + "/replies";
     }
 
     private String getUnknownCommandMessage() {
