@@ -13,7 +13,11 @@ public class FeedbackService {
         this.feedbackRepository = feedbackRepository;
     }
 
-    public void createFeedback(Feedback user) {
-        feedbackRepository.save(user);
+    public void createFeedback(Feedback feedback) {
+        feedbackRepository.save(feedback);
+    }
+
+    public Feedback findById(Long feedbackId){
+        return feedbackRepository.findById(feedbackId).orElse(null);
     }
 }

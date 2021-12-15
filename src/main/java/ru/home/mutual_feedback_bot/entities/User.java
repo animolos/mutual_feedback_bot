@@ -26,9 +26,16 @@ public class User {
     @Setter
     private Long selectedEventId;
 
+    @Column
+    @Setter
+    private Long selectedFeedbackId;
+
     @OneToMany(mappedBy="createdBy")
     private final Set<Event> events = new HashSet<>();
 
     @OneToMany(mappedBy="createdBy")
     private Set<Feedback> feedbacks;
+
+    @OneToMany(mappedBy="createdBy")
+    private Set<Reply> replies;
 }
