@@ -7,6 +7,7 @@ import ru.home.mutual_feedback_bot.config.BotConfig;
 import ru.home.mutual_feedback_bot.entities.Event;
 import ru.home.mutual_feedback_bot.entities.Feedback;
 import ru.home.mutual_feedback_bot.entities.User;
+import ru.home.mutual_feedback_bot.services.FeedbackService;
 import ru.home.mutual_feedback_bot.services.UserService;
 
 import java.util.Comparator;
@@ -17,11 +18,14 @@ public class FeedbackCommandHandler implements ICommandHandler {
 
     private final String telegramBotUrl;
     private final UserService userService;
+    private final FeedbackService feedbackService;
 
     public FeedbackCommandHandler(
             UserService userService,
+            FeedbackService feedbackService,
             BotConfig config) {
         this.userService = userService;
+        this.feedbackService = feedbackService;
         this.telegramBotUrl = config.getTelegramBotUrl();
     }
 
@@ -46,23 +50,33 @@ public class FeedbackCommandHandler implements ICommandHandler {
                 continue;
             }
 
-            builder.append(String.format("Event: %s\n", event.getName()));
+            StringBuilder tempBuilder = new StringBuilder();
             for (Feedback feedback : event.getFeedbacks()
                     .stream()
+                    .filter(f -> !f.isRead())
                     .sorted(Comparator.comparing(Feedback::getCreatedAt))
                     .toList()) {
                 if (feedback.isReply()) {
                     continue;
                 }
-                String params = String.format("%s %s %s", "leaveFeedback", event.getId(), feedback.getId());
-                builder.append(String.format("(%s) -> %s\n",
+                String params = String.format("%s__%s__%s", "leaveFeedback", event.getId(), feedback.getId());
+                tempBuilder.append(String.format("(%s) -> %s\n",
                         String.format("<a href=\"%s\">%s</a>", telegramBotUrl + params, "reply"),
                         feedback.getMessage()));
+
+                feedback.setRead(true);
+                feedbackService.insertOrUpdate(feedback);
             }
+
+            if (tempBuilder.isEmpty())
+                continue;
+
+            builder.append(String.format("Event: %s\n", event.getName()));
+            builder.append(tempBuilder);
         }
 
         String botAnswer = builder.isEmpty()
-                ? "Can't find feedback of your events."
+                ? "No new feedback"
                 : builder.toString();
 
         var sendMessage = new SendMessage(chatId, botAnswer);

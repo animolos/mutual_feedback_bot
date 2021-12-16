@@ -34,6 +34,10 @@ public class Feedback {
     @NonNull
     private Date createdAt;
 
+    @Column
+    @Setter
+    private boolean isRead = false;
+
     @Setter
     @ManyToOne
     @JoinColumn(name = "parentFeedback")

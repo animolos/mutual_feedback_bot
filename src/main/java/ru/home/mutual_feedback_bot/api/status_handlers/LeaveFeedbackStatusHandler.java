@@ -53,7 +53,7 @@ public class LeaveFeedbackStatusHandler implements IStatusHandler {
             feedback.setParentFeedback(parentFeedback);
         }
 
-        feedbackService.createFeedback(feedback);
+        feedbackService.insertOrUpdate(feedback);
         userService.resetUser(user);
 
         String botAnswer = "Successfully send!";

@@ -13,7 +13,7 @@ public class FeedbackService {
         this.feedbackRepository = feedbackRepository;
     }
 
-    public void createFeedback(Feedback feedback) {
+    public void insertOrUpdate(Feedback feedback) {
         feedbackRepository.save(feedback);
     }
 

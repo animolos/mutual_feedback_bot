@@ -7,6 +7,7 @@ import ru.home.mutual_feedback_bot.config.BotConfig;
 import ru.home.mutual_feedback_bot.entities.Event;
 import ru.home.mutual_feedback_bot.entities.Feedback;
 import ru.home.mutual_feedback_bot.entities.User;
+import ru.home.mutual_feedback_bot.services.FeedbackService;
 import ru.home.mutual_feedback_bot.services.UserService;
 
 import java.util.Comparator;
@@ -18,11 +19,14 @@ public class RepliesCommandHandler implements ICommandHandler {
 
     private final String telegramBotUrl;
     private final UserService userService;
+    private final FeedbackService feedbackService;
 
     public RepliesCommandHandler(
             UserService userService,
+            FeedbackService feedbackService,
             BotConfig config) {
         this.userService = userService;
+        this.feedbackService = feedbackService;
         this.telegramBotUrl = config.getTelegramBotUrl();
     }
 
@@ -49,6 +53,7 @@ public class RepliesCommandHandler implements ICommandHandler {
                     .sorted(Comparator.comparing(Feedback::getCreatedAt))
                     .toList()) {
                 List<Feedback> replies = feedback.getChildFeedback().stream()
+                        .filter(f -> !f.isRead())
                         .sorted(Comparator.comparing(Feedback::getCreatedAt)).toList();
 
                 for (Feedback reply : replies) {
@@ -56,9 +61,12 @@ public class RepliesCommandHandler implements ICommandHandler {
                     tempBuilder.append(String.format("%s\n", reply.getMessage()));
                     tempBuilder.append("On your message:\n");
                     tempBuilder.append(String.format("%s\n", feedback.getMessage()));
-                    String params = String.format("%s %s %s", "leaveFeedback", event.getId(), reply.getId());
+                    String params = String.format("%s__%s__%s", "leaveFeedback", event.getId(), reply.getId());
                     tempBuilder.append(String.format("(<a href=\"%s\">reply</a>)", telegramBotUrl + params));
                     tempBuilder.append("\n-----\n");
+
+                    reply.setRead(true);
+                    feedbackService.insertOrUpdate(reply);
                 }
             }
 
@@ -69,7 +77,7 @@ public class RepliesCommandHandler implements ICommandHandler {
         }
 
         String botAnswer = builder.isEmpty()
-                ? "No replies to your feedback"
+                ? "No new replies to your feedback"
                 : builder.toString();
 
         var sendMessage = new SendMessage(chatId, botAnswer);

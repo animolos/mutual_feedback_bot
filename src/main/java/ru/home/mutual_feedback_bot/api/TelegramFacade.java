@@ -46,32 +46,38 @@ public class TelegramFacade {
             return null;
         }
 
-        String[] tokens = message.getText().trim().split(" ");
+        SendMessage sendMessage = tryHandleCommand(message, user);
+
+        if (sendMessage == null) {
+            sendMessage = tryHandleStatus(message, user);
+        }
+
+        return sendMessage != null ? sendMessage : new SendMessage(user.getId().toString(), getUnknownCommandMessage());
+    }
+
+    private SendMessage tryHandleCommand(Message message, User user) {
+        String[] tokens = message.getText().trim().split(" ", 2);
         String command = tokens[0];
-        String[] args = Arrays.copyOfRange(tokens, 1, tokens.length);
+        String[] args = tokens.length == 2 ? tokens[1].split("__") : new String[0];
 
         ICommandHandler commandHandler = Arrays.stream(commandHandlers)
                 .filter(h -> h.accept(command))
                 .findFirst()
                 .orElse(null);
 
-        if (commandHandler != null) {
-            return commandHandler.handle(user, args);
-        }
-
+        return commandHandler != null ? commandHandler.handle(user, args) : null;
+    }
+    
+    private SendMessage tryHandleStatus(Message message, User user) {
         ConversationStatus status = user.getConversationStatus();
         IStatusHandler statusHandler = Arrays.stream(statusHandlers)
                 .filter(h -> h.accept(status))
                 .findFirst()
                 .orElse(null);
 
-        if (statusHandler != null) {
-            return statusHandler.handle(message, user);
-        }
-
-        return new SendMessage(user.getId().toString(), getUnknownCommandMessage());
+        return statusHandler != null ? statusHandler.handle(message, user) : null;
     }
-
+    
     private User getUser(Long chatId) {
         User user = userService.findById(chatId);
 
