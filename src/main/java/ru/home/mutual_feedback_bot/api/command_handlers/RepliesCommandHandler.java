@@ -63,7 +63,7 @@ public class RepliesCommandHandler implements ICommandHandler {
                     tempBuilder.append(String.format("%s\n", feedback.getMessage()));
                     String params = String.format("%s__%s__%s", "leaveFeedback", event.getId(), reply.getId());
                     tempBuilder.append(String.format("(<a href=\"%s\">reply</a>)", telegramBotUrl + params));
-                    tempBuilder.append("\n-----\n");
+                    tempBuilder.append("\n\n");
 
                     reply.setRead(true);
                     feedbackService.insertOrUpdate(reply);
@@ -71,7 +71,7 @@ public class RepliesCommandHandler implements ICommandHandler {
             }
 
             if (!tempBuilder.isEmpty()) {
-                builder.append(String.format("Event: %s\n", event.getName()));
+                builder.append(String.format("Event: %s\n\n", event.getName()));
                 builder.append(tempBuilder);
             }
         }
